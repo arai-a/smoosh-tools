@@ -56,6 +56,7 @@ where `BRANCH_NAME` is `{branch-name}-generated-branch`
 ## Bump jsparagus revision to [`+ref/ci_generated/master`](https://github.com/mozilla-spidermonkey/jsparagus/wiki/Branch-for-generated-files) HEAD.
 
 ```
+cd {path-to-mozilla-central}
 update-jsparagus-reference o -
 ./mach vendor rust
 # Commit vendored files here.
