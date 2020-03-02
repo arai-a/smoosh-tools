@@ -1,0 +1,2 @@
+#!/bin/sh
+git ls-remote upstream | grep refs/ci_generated/master | awk '{print $1}'
