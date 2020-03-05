@@ -67,29 +67,30 @@ if args.command == 'o':
 found_orig = False
 with open(cargo_toml, 'r') as f:
     for line in f:
-        if line.startswith(ORIG_DEP):
+        if line.startswith(ORIG_DEP) or line.startswith('# ' + ORIG_DEP):
+            if line.startswith('# ' + ORIG_DEP):
+                line = line[2:]
+
             if args.command == 'o':
                 line = modify_rev(line, official_rev)
                 found_orig = True
+                lines.append(line)
             else:
                 line = '# ' + line
-        elif line.startswith('# ' + ORIG_DEP):
-            if args.command == 'o':
-                found_orig = True
-                line = line[2:]
-                line = modify_rev(line, official_rev)
+                lines.append(line)
+                if args.command == 'l':
+                    lines.append('jsparagus = { path = "../../../../../jsparagus/" }\n')
+                elif args.command == 'f':
+                    lines.append('jsparagus = {{ git = "https://github.com/{}/jsparagus", branch = "{}" }}\n'.format(args.USER, args.BRANCH))
         elif line.startswith(OTHER_DEP):
             continue
-        lines.append(line)
+        else:
+            lines.append(line)
 
-if args.command == 'l':
-    lines.append('jsparagus = { path = "../../../../../jsparagus/" }\n')
-elif args.command == 'o':
+if args.command == 'o':
     if not found_orig:
         print("Commented out official reference not found.", file=sys.stderr)
         sys.exit(1)
-elif args.command == 'f':
-    lines.append('jsparagus = {{ git = "https://github.com/{}/jsparagus", branch = "{}" }}\n'.format(args.USER, args.BRANCH))
 
 content = ''.join(lines)
 print(content)
