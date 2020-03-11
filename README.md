@@ -51,8 +51,8 @@ This does th following:
 * push above to 'origin' of jsparagus fork
 * push to try with the following commits:
   * update Cargo.toml to refer the above `{branch-name}-generated-branch` branch, and `./mach vendor rust`
-  * try syntax
-* Remove all commits generated above
+  * try syntax `try: -b do -p sm-smoosh-linux64 -u none -t none`
+* Remove all temporary commits generated above
 
 
 ## Bump jsparagus revision to [`+ref/heads/ci_generated`](https://github.com/mozilla-spidermonkey/jsparagus/wiki/Branch-for-generated-files) HEAD.
