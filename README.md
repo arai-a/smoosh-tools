@@ -48,10 +48,11 @@ smoosh-tools try
 
 This does th following:
 * create `{branch-name}-generated-branch` branch on jsparagus, with generated files
-* push above to 'origin' of jsparagus fork
+* push above to jsparagus fork (`origin`)
 * push to try with the following commits:
   * update Cargo.toml to refer the above `{branch-name}-generated-branch` branch, and `./mach vendor rust`
-  * try syntax `try: -b do -p sm-smoosh-linux64 -u none -t none`
+  * try syntax `try: -b do -p sm-smoosh-linux64 -u none -t none`  
+    (note that SM(smoosh) is tier3 job, that is hidden by default)
 * Remove all temporary commits generated above
 
 
