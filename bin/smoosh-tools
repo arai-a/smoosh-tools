@@ -13,6 +13,28 @@ def die(s):
     sys.exit(1)
 
 
+class Logger:
+    ENABLED = True
+
+    @classmethod
+    def disable(cls):
+        cls.ENABLED = False
+
+    @classmethod
+    def info(cls, s):
+        if cls.ENABLED:
+            print('[INFO]', s)
+
+    @classmethod
+    def cmd(cls, cmd):
+        def format_cmd(s):
+            if ' ' in s:
+                return '"{}"'.format(s.replace('"', '\"'))
+            return s
+
+        cls.info('$ {}'.format(' '.join(list(map(format_cmd, cmd)))))
+
+
 class Environment:
     @classmethod
     def in_mc(cls, soft=False):
@@ -92,7 +114,7 @@ class GitRepository:
 
     def get_output(self, *args):
         cmd = ['git'] + list(args)
-        print(cmd)
+        Logger.cmd(cmd)
         output = subprocess.run(cmd,
                                 capture_output=True,
                                 cwd=self.path)
@@ -101,7 +123,7 @@ class GitRepository:
 
     def run(self, *args):
         cmd = ['git'] + list(args)
-        print(cmd)
+        Logger.cmd(cmd)
         subprocess.run(cmd,
                        check=True,
                        cwd=self.path)
@@ -237,7 +259,7 @@ class PushToGeneratedBranch:
 
         try:
             cmd = ['make', 'all']
-            print(cmd)
+            Logger.cmd(cmd)
             subprocess.run(cmd,
                            check=True,
                            cwd=jsparagus.path)
@@ -246,6 +268,7 @@ class PushToGeneratedBranch:
             with open(gitignore_path, 'r') as f:
                 gitignore_content = f.read()
 
+            Logger.info('Modifying .gitignore')
             with open(gitignore_path, 'w') as f:
                 f.write(gitignore_content.replace('*_generated.rs', ''))
             try:
@@ -258,6 +281,7 @@ class PushToGeneratedBranch:
                 finally:
                     jsparagus.run('reset', '--soft', 'HEAD^')
             finally:
+                Logger.info('Restoring .gitignore')
                 with open(gitignore_path, 'w') as f:
                     f.write(gitignore_content)
 
@@ -284,7 +308,7 @@ class PushToTry:
         CargoUpdater.update_fork(github_user, gen_branch)
 
         cmd = ['./mach', 'vendor', 'rust']
-        print(cmd)
+        Logger.cmd(cmd)
         subprocess.run(cmd,
                        check=True,
                        cwd=mc.path)
@@ -351,4 +375,5 @@ elif args.command == 'try':
 elif args.command == 'gen':
     PushToGeneratedBranch.run()
 elif args.command == 'ci_generated_head':
+    Logger.disable()
     print(CIGeneratedBranch.get())
