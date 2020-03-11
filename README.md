@@ -7,6 +7,7 @@ Tools for Jsparagus and SmooshMonkey development
  * Place the `mozilla-central` clone next to the `jsparagus` clone
  * Make sure `origin` remote of `jsparagus` is your fork of [official jsparagus](https://github.com/mozilla-spidermonkey/jsparagus)
  * Make sure `upstream` remote of `jsparagus` is [official jsparagus](https://github.com/mozilla-spidermonkey/jsparagus)
+ * Make sure `mozilla-central` is git repository with git-cinnabar to `hg::https://hg.mozilla.org/mozilla-unified`, if you want to push to try with single command
 
 # Workflow
 
