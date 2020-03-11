@@ -1,2 +1,0 @@
-#!/bin/sh
-git ls-remote upstream | grep refs/heads/ci_generated | awk '{print $1}'

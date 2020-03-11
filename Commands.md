@@ -1,6 +1,6 @@
 # Commands
 
-## `push-to-generated-branch`
+## `gen`
 
 Used in jsparagus clone of fork.
 
@@ -9,24 +9,24 @@ The remote branch will be named `{current_branch_name}-generated-branch`.
 This can be used by `update-jsparagus-reference` command.
 
 ```
-push-to-generated-branch
+smoosh-tools gen
 ```
 
 :warning: This pushes forcibly. Commits for previous push will be removed.
 
-## `get-ci-generated-head`
+## `ci_generated_head`
 
 Used in jsparagus clone.
 
-Get the SHA of the HEAD of [`+ref/ci_generated/master`](https://github.com/mozilla-spidermonkey/jsparagus/wiki/Branch-for-generated-files).
+Get the SHA of the HEAD of [`+ref/heads/ci_generated`](https://github.com/mozilla-spidermonkey/jsparagus/wiki/Branch-for-generated-files).
 
 `mozilla-spidermonkey/jsparagus` should be added to remote with `upstream` name.
 
 ```
-get-ci-generated-head
+ci_generated_head
 ```
 
-## `update-jsparagus-reference`
+## `cargo`
 
 Used in mozilla-central clone.
 
@@ -37,7 +37,7 @@ Change jsparagus reference in js/src/frontend/smoosh/Cargo.toml.
 Put `jsparagus` directory next to `mozilla-central`.
 
 ```
-update-jsparagus-reference l
+smoosh-tools cargo l
 ```
 
 ### Use forked jsparagus branch on GitHub
@@ -45,7 +45,7 @@ update-jsparagus-reference l
 First, create a branch with generated files with `push-to-generated-branch` command.
 
 ```
-update-jsparagus-reference f GITHUB_USER_NAME BRANCH_NAME
+smoosh-tools cargo f GITHUB_USER_NAME BRANCH_NAME
 ```
 
 where `BRANCH_NAME` is `*-generated-branch`
@@ -53,13 +53,13 @@ where `BRANCH_NAME` is `*-generated-branch`
 ### Use official jsparagus on GitHub
 
 ```
-update-jsparagus-reference o
+smoosh-tools cargo o
 ```
 
 ### Update revision for official jsparagus on GitHub
 
 ```
-update-jsparagus-reference o SHA
+smoosh-tools cargo o SHA
 ```
 
 where `SHA` is the commit in [`+ref/ci_generated/master`](https://github.com/mozilla-spidermonkey/jsparagus/wiki/Branch-for-generated-files).
@@ -69,5 +69,13 @@ where `SHA` is the commit in [`+ref/ci_generated/master`](https://github.com/moz
 This uses `get-ci-generated-head` internally.
 
 ```
-update-jsparagus-reference o -
+smoosh-tools cargo o -
+```
+
+## `try`
+
+Push to try with current local jsparagus and mozilla-central.
+
+```
+smoosh-tools try
 ```

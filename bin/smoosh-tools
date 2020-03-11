@@ -1,0 +1,354 @@
+#!/usr/bin/env python3
+
+import argparse
+import os
+import pathlib
+import re
+import subprocess
+import sys
+
+
+def die(s):
+    print(s)
+    sys.exit(1)
+
+
+class Environment:
+    @classmethod
+    def in_mc(cls, soft=False):
+        cls.MC_DIR = pathlib.Path().absolute()
+
+        cls.MC_CARGO_TOML = cls.MC_DIR / 'js' / 'src' / 'frontend' / 'smoosh' / 'Cargo.toml'
+
+        if not cls.MC_CARGO_TOML.exists():
+            if soft:
+                return False
+            die("{} not found.".format(cls.MC_CARGO_TOML))
+
+        jsparagus_dir = cls.MC_DIR.parent / 'jsparagus'
+        if not jsparagus_dir.exists():
+            if soft:
+                return False
+            die("{} not found.".format(jsparagus_dir))
+
+        cls.__in_jsparagus_with(jsparagus_dir)
+        return True
+
+    @classmethod
+    def in_jsparagus(cls):
+        cls.__in_jsparagus_with(pathlib.Path().absolute())
+
+    @classmethod
+    def __in_jsparagus_with(cls, jsparagus_dir):
+        cls.JSPARAGUS_DIR = jsparagus_dir
+
+        cls.JSPARAGUS_CARGO_TOML = cls.JSPARAGUS_DIR / 'Cargo.toml'
+
+        if not cls.JSPARAGUS_CARGO_TOML.exists():
+            if soft:
+                return False
+            die("{} not found.".format(cls.JSPARAGUS_CARGO_TOML))
+
+        with open(cls.JSPARAGUS_CARGO_TOML, 'r') as f:
+            if 'name = "jsparagus"' not in f.read():
+                die("{} is not for jsparagus.".format(cls.JSPARAGUS_CARGO_TOML))
+
+        return True
+
+    @classmethod
+    def mc(cls):
+        cls.in_mc(soft=False)
+        return GitRepository(cls.MC_DIR)
+
+    @classmethod
+    def jsparagus(cls):
+        if not cls.in_mc(soft=True):
+            cls.in_jsparagus()
+        return GitRepository(cls.JSPARAGUS_DIR)
+
+
+class GitRepository:
+    def __init__(self, path):
+        self.path = path
+
+        self.git_dir = self.path / '.git'
+        if not self.git_dir.exists():
+            die("Not a Git repository.".format(self.path))
+
+    def assert_clean(self):
+        cmd = ['git', 'diff-index', '--quiet', 'HEAD', '--']
+        output = subprocess.run(cmd,
+                                capture_output=True,
+                                cwd=self.path)
+        if output.returncode != 0:
+            die("Uncommitted changes found")
+
+        cmd = ['git', 'diff-index', '--cached', '--quiet', 'HEAD', '--']
+        output = subprocess.run(cmd,
+                                capture_output=True,
+                                cwd=self.path)
+        if output.returncode != 0:
+            die("Uncommitted changes found")
+
+    def get_output(self, *args):
+        cmd = ['git'] + list(args)
+        print(cmd)
+        output = subprocess.run(cmd,
+                                capture_output=True,
+                                cwd=self.path)
+
+        return output.stdout.decode()
+
+    def run(self, *args):
+        cmd = ['git'] + list(args)
+        print(cmd)
+        subprocess.run(cmd,
+                       check=True,
+                       cwd=self.path)
+
+    def ls_remote(self, remote):
+        result = {}
+        for line in self.get_output('ls-remote', remote).strip().split('\n'):
+            sha, ref = line.split('\t')
+            result[ref] = sha
+        return result
+
+    def branch(self):
+        return self.get_output('rev-parse', '--abbrev-ref', 'HEAD').strip()
+
+
+class CIGeneratedBranch:
+    def get():
+        jsparagus = Environment.jsparagus()
+        remotes = jsparagus.ls_remote('upstream')
+
+        branch = 'refs/heads/ci_generated'
+
+        if branch not in remotes:
+            die("{} not found in upstream".format(branch))
+
+        return remotes[branch]
+
+
+class CargoUpdater:
+    @classmethod
+    def update_local(cls):
+        Environment.in_mc()
+
+        def on_official(line, lines):
+            line = '# ' + line
+            lines.append(line)
+
+            line = 'jsparagus = { path = "../../../../../jsparagus/" }\n'
+            print(line, end='')
+            lines.append(line)
+
+        def on_finish():
+            pass
+
+        cls.__update(on_official, on_finish)
+
+    @classmethod
+    def update_official(cls, rev):
+        Environment.in_mc()
+
+        if rev == '-':
+            rev = CIGeneratedBranch.get()
+
+        found = False
+        def on_official(line, lines):
+            nonlocal rev, found
+
+            found = True
+
+            if rev:
+                line = re.sub('rev = ".+"', 'rev = "{}"'.format(rev), line)
+            print(line, end='')
+            lines.append(line)
+
+        def on_finish():
+            if not found:
+                die("Commented out official reference not found.")
+
+
+        cls.__update(on_official, on_finish)
+
+    @classmethod
+    def update_fork(cls, user, branch):
+        Environment.in_mc()
+
+        def on_official(line, lines):
+            line = '# ' + line
+            lines.append(line)
+
+            line = 'jsparagus = {{ git = "https://github.com/{}/jsparagus", branch = "{}" }}\n'.format(user, branch)
+            print(line, end='')
+            lines.append(line)
+
+        def on_finish():
+            pass
+
+        cls.__update(on_official, on_finish)
+
+    def __update(on_official, on_finish):
+        cargo_toml = Environment.MC_CARGO_TOML
+
+        ORIG_DEP = 'jsparagus = { git = "https://github.com/mozilla-spidermonkey/jsparagus",'
+        OTHER_DEP = 'jsparagus ='
+
+        lines = []
+        with open(cargo_toml, 'r') as f:
+            for line in f:
+                if line.startswith(ORIG_DEP) or line.startswith('# ' + ORIG_DEP):
+                    if line.startswith('# ' + ORIG_DEP):
+                        line = line[2:]
+
+                    on_official(line, lines)
+                elif line.startswith(OTHER_DEP):
+                    continue
+                else:
+                    lines.append(line)
+
+        on_finish()
+
+        content = ''.join(lines)
+
+        with open(cargo_toml, 'w') as f:
+            f.write(content)
+
+
+class PushToGeneratedBranch:
+    def run():
+        jsparagus = Environment.jsparagus()
+        jsparagus.assert_clean()
+
+        git_pat = re.compile(r'git@github.com:(.+)/jsparagus.git')
+        origin = jsparagus.get_output('remote', 'get-url', 'origin')
+        m = git_pat.search(origin)
+        github_user = m.group(1)
+
+        branch = jsparagus.branch()
+        if branch == 'HEAD':
+            die('Detached HEAD is not supported. Please checkout branch')
+
+        gen_branch = '{}-generated-branch'.format(branch)
+
+        jsparagus.run('checkout', '-b', gen_branch)
+
+        try:
+            cmd = ['make', 'all']
+            print(cmd)
+            subprocess.run(cmd,
+                           check=True,
+                           cwd=jsparagus.path)
+
+            gitignore_path = jsparagus.path / '.gitignore'
+            with open(gitignore_path, 'r') as f:
+                gitignore_content = f.read()
+
+            with open(gitignore_path, 'w') as f:
+                f.write(gitignore_content.replace('*_generated.rs', ''))
+            try:
+                jsparagus.run('add', '.')
+
+                jsparagus.run('commit', '-m', 'Add generated files')
+
+                try:
+                    jsparagus.run('push', '-f', 'origin', gen_branch)
+                finally:
+                    jsparagus.run('reset', '--soft', 'HEAD^')
+            finally:
+                with open(gitignore_path, 'w') as f:
+                    f.write(gitignore_content)
+
+                jsparagus.run('reset')
+        finally:
+            jsparagus.run('checkout', branch)
+            jsparagus.run('branch', '-D', gen_branch)
+
+        return github_user, gen_branch
+
+
+class PushToTry:
+    def run(build):
+        mc = Environment.mc()
+        mc.assert_clean()
+
+        try_url = 'hg::https://hg.mozilla.org/try'
+        remotes = mc.get_output('remote').strip().split('\n')
+        if 'try' not in remotes:
+            mc.run('remote', 'add', 'try', try_url)
+
+        github_user, gen_branch = PushToGeneratedBranch.run()
+
+        CargoUpdater.update_fork(github_user, gen_branch)
+
+        cmd = ['./mach', 'vendor', 'rust']
+        print(cmd)
+        subprocess.run(cmd,
+                       check=True,
+                       cwd=mc.path)
+
+        mc.run('add', '.')
+        mc.run('commit', '-m', 'Update vendored crates for jsparagus')
+        try:
+            platform = 'sm-smoosh-linux64'
+            syntax = "try: -b {} -p {} -u none -t none".format(build, platform)
+            mc.run('commit', '--allow-empty', '-m', syntax)
+            try:
+                mc.run('push', 'try')
+            finally:
+                mc.run('reset', '--hard', 'HEAD^')
+        finally:
+            mc.run('reset', '--hard', 'HEAD^')
+
+
+parser = argparse.ArgumentParser(description='Tools for SmooshMonkey + jsparagus development')
+
+subparsers = parser.add_subparsers(dest='command',
+                                   required=True)
+update_parser = subparsers.add_parser('cargo',
+                                      help='(m-c) Change jsparagus reference in Cargo.toml')
+type_parser = update_parser.add_subparsers(dest='type',
+                                           required=True)
+type_parser.add_parser('l',
+                       help='Use local jsparagus')
+official_parser = type_parser.add_parser('o',
+                                         help='Use official jsparagus')
+official_parser.add_argument('REV', nargs='?',
+                             help='Revision, or "-" for ci_generated head. defaults to current revision')
+fork_parser = type_parser.add_parser('f',
+                                     help='Use forked jsparagus')
+fork_parser.add_argument('USER',
+                         help='GitHub user name')
+fork_parser.add_argument('BRANCH',
+                         help='Branch to use')
+
+try_parser = subparsers.add_parser('try',
+                                   help='(m-c) Push to try with jsparagus generated branch')
+try_parser.add_argument('-b', type=str,
+                        default='do',
+                        help='build type (o/d/do)')
+
+subparsers.add_parser('gen',
+                      help='(jsparagus) Push to generated branch')
+
+subparsers.add_parser('ci_generated_head',
+                      help='(jsparagus) Get ci_generated branch head SHA')
+
+
+args = parser.parse_args()
+
+if args.command == 'cargo':
+    if args.type == 'l':
+        CargoUpdater.update_local()
+    elif args.type == 'o':
+        CargoUpdater.update_official(args.REV)
+    elif args.type == 'f':
+        CargoUpdater.update_fork(args.USER, args.BRANCH)
+elif args.command == 'try':
+    PushToTry.run(args.b)
+elif args.command == 'gen':
+    PushToGeneratedBranch.run()
+elif args.command == 'ci_generated_head':
+    print(CIGeneratedBranch.get())

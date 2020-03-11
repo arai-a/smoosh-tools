@@ -16,7 +16,7 @@ Update `jsparagus` reference to local clone, and update vendored crates.
 
 ```
 cd {path-to-mozilla-central}
-update-jsparagus-reference l
+smoosh-tools cargo l
 ./mach vendor rust
 ```
 
@@ -26,7 +26,7 @@ Revert the change from above, and update vendored crates.
 
 ```
 cd {path-to-mozilla-central}
-update-jsparagus-reference o
+smoosh-tools cargo o
 ./mach vendor rust
 ```
 
@@ -38,26 +38,16 @@ Create a remote branch with generated files.
 cd {path-to-jsparagus}
 # Create a branch {branch-name} for the modification here, if not yet.
 # Commit modified files here, if not yet.
-push-to-generated-branch
+cd {path-to-mozilla-central}
+# Commit modified files here, if not yet.
+smoosh-tools try
 ```
 
-Update `jsparagus` reference to the branch created above.
+## Bump jsparagus revision to [`+ref/heads/ci_generated`](https://github.com/mozilla-spidermonkey/jsparagus/wiki/Branch-for-generated-files) HEAD.
 
 ```
 cd {path-to-mozilla-central}
-update-jsparagus-reference f GITHUB_USER_NAME BRANCH_NAME
-./mach vendor rust
-# Commit vendored files here.
-# Push to try here.
-```
-
-where `BRANCH_NAME` is `{branch-name}-generated-branch`
-
-## Bump jsparagus revision to [`+ref/ci_generated/master`](https://github.com/mozilla-spidermonkey/jsparagus/wiki/Branch-for-generated-files) HEAD.
-
-```
-cd {path-to-mozilla-central}
-update-jsparagus-reference o -
+smoosh-tools cargo o -
 ./mach vendor rust
 # Commit vendored files here.
 ```
