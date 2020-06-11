@@ -27,7 +27,6 @@ Revert the change from above, and update vendored crates.
 ```
 cd {path-to-mozilla-central}
 smoosh-tools cargo o
-./mach vendor rust
 ```
 
 ## Push to try with modified jsparagus
@@ -61,7 +60,7 @@ This does th following:
 cd {path-to-mozilla-central}
 smoosh-tools cargo o -
 ./mach vendor rust
-# Commit vendored files here.
+# Commit updated/vendored files here.
 ```
 
 # Commands
