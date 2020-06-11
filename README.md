@@ -22,7 +22,7 @@ smoosh-tools cargo l
 
 ## Before commit
 
-Revert the change from above, and update vendored crates.
+Revert the change from above.
 
 ```
 cd {path-to-mozilla-central}
