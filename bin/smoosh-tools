@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 
 import argparse
+import json
 import os
 import pathlib
 import re
 import subprocess
 import sys
+import urllib.request
 
 
 def die(s):
@@ -53,7 +55,7 @@ class Environment:
                 return False
             die("{} not found.".format(jsparagus_dir))
 
-        cls.__in_jsparagus_with(jsparagus_dir)
+        cls.__in_jsparagus_with(jsparagus_dir, soft)
         return True
 
     @classmethod
@@ -61,7 +63,7 @@ class Environment:
         cls.__in_jsparagus_with(pathlib.Path().absolute())
 
     @classmethod
-    def __in_jsparagus_with(cls, jsparagus_dir):
+    def __in_jsparagus_with(cls, jsparagus_dir, soft=False):
         cls.JSPARAGUS_DIR = jsparagus_dir
 
         cls.JSPARAGUS_CARGO_TOML = cls.JSPARAGUS_DIR / 'Cargo.toml'
@@ -134,6 +136,12 @@ class GitRepository:
             sha, ref = line.split('\t')
             result[ref] = sha
         return result
+
+    def fetch(self, branch):
+        return self.get_output('fetch', branch)
+
+    def commit_message(self, rev):
+        return self.get_output('log', '-1', '--pretty=format:%s%n', rev)
 
     def branch(self):
         return self.get_output('rev-parse', '--abbrev-ref', 'HEAD').strip()
@@ -327,6 +335,121 @@ class PushToTry:
             mc.run('reset', '--hard', 'HEAD^')
 
 
+class MCRemoteRepository:
+    HG_API_URL = 'https://hg.mozilla.org/mozilla-central/'
+
+    @classmethod
+    def call(cls, name, path):
+        url = '{}{}{}'.format(cls.HG_API_URL, name, path)
+
+        req = urllib.request.Request(url, None, {})
+        response = urllib.request.urlopen(req)
+        return response.read()
+
+    @classmethod
+    def call_json(cls, name, path):
+        return json.loads(cls.call(name, path))
+
+    @classmethod
+    def file(cls, rev, path):
+        return cls.call('raw-file', '/{}{}'.format(rev, path))
+
+
+class TreeHerder:
+    API_URL = 'https://treeherder.mozilla.org/api/'
+
+    @classmethod
+    def call(cls, name):
+        url = '{}{}'.format(cls.API_URL, name)
+
+        req = urllib.request.Request(url, None, {
+            'User-Agent': 'smoosh-tools',
+        })
+        response = urllib.request.urlopen(req)
+        return response.read()
+
+    @classmethod
+    def call_json(cls, name):
+        return json.loads(cls.call(name))
+
+
+    @classmethod
+    def push_id(cls, rev):
+        push = cls.call_json(f'project/mozilla-central/push/?full=true&format=json&count=1&revision={rev}')
+        return push['results'][0]['id']
+
+    @classmethod
+    def jobs(cls, push_id):
+        push = cls.call_json(f'jobs/?push_id={push_id}&format=json')
+        count = push['count']
+        results = []
+        results += push['results']
+
+        page = 2;
+        while len(results) < count:
+            push = cls.call_json(f'jobs/?push_id={push_id}&format=json&page={page}')
+            results += push['results']
+            page += 1
+
+        return results
+
+
+class Status:
+    def run():
+        Logger.info('Fetching ci_generated branch')
+
+        jsparagus = Environment.jsparagus()
+        jsparagus.fetch('ci_generated')
+
+        Logger.info('Checking mozilla-central tip revision')
+
+        m_c_rev = MCRemoteRepository.call_json('json-log', '/tip/')['node']
+        cargo_file = MCRemoteRepository.file(m_c_rev, '/js/src/frontend/smoosh/Cargo.toml').decode()
+        m = re.search('rev = "(.+)"', cargo_file)
+        ci_generated_rev = m.group(1)
+
+        Logger.info('Checking jsparagus referred by mozilla-central')
+
+        message = jsparagus.commit_message(ci_generated_rev)
+        m = re.search('for ([A-Fa-f0-9]+)', message)
+        master_rev = m.group(1)
+
+        Logger.info('Checking build status')
+
+        push_id = TreeHerder.push_id(m_c_rev)
+        jobs = TreeHerder.jobs(push_id)
+        nonunified_job = None
+        smoosh_job = None
+        for job in jobs:
+            if 'spidermonkey-sm-nonunified-linux64/debug' in job:
+                nonunified_job = job
+            if 'spidermonkey-sm-smoosh-linux64/opt' in job:
+                smoosh_job = job
+
+        def get_result(job):
+            if job:
+                if 'completed' in job:
+                    if 'success' in job:
+                        return 'OK'
+                    else:
+                        return 'NG'
+                else:
+                    return 'not yet finished'
+            else:
+                return 'unknown'
+
+        nonunified_result = get_result(nonunified_job)
+        smoosh_result = get_result(smoosh_job)
+
+        print(f'mozilla-central tip: {m_c_rev}')
+        print(f'referred jsparagus revision: {master_rev}')
+        print(f'Build status:')
+        print(f'  Build with --enable-smoosh: {nonunified_result}')
+        print(f'  Test with --smoosh: {smoosh_result}')
+
+
+
+
 parser = argparse.ArgumentParser(description='Tools for SmooshMonkey + jsparagus development')
 
 subparsers = parser.add_subparsers(dest='command',
@@ -360,6 +483,8 @@ subparsers.add_parser('gen',
 subparsers.add_parser('ci_generated_head',
                       help='(jsparagus) Get ci_generated branch head SHA')
 
+subparsers.add_parser('status',
+                      help='(jsparagus) Show latest mozilla-central revision, and jsparagus revision referred from mozilla-central, and whether it builds or not')
 
 args = parser.parse_args()
 
@@ -377,3 +502,5 @@ elif args.command == 'gen':
 elif args.command == 'ci_generated_head':
     Logger.disable()
     print(CIGeneratedBranch.get())
+elif args.command == 'status':
+    Status.run()

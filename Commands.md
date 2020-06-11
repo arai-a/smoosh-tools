@@ -79,3 +79,11 @@ Push to try with current local jsparagus and mozilla-central.
 ```
 smoosh-tools try
 ```
+
+## `status`
+
+Shows the latest mozilla-central revision, and jsparagus revision referred by mozilla-central, and build status with them
+
+```
+smoosh-tools status
+```
