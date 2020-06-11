@@ -13,12 +13,11 @@ Tools for Jsparagus and SmooshMonkey development
 
 ## Start development with local clone of jsparagus
 
-Update `jsparagus` reference to local clone, and update vendored crates.
+Update `jsparagus` reference to local clone.
 
 ```
 cd {path-to-mozilla-central}
 smoosh-tools cargo l
-./mach vendor rust
 ```
 
 ## Before commit
