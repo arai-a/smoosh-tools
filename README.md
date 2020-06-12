@@ -20,9 +20,42 @@ cd {path-to-mozilla-central}
 smoosh-tools cargo l
 ```
 
+## Prepare build configuration for SmooshMonkey
+
+Create `$HOME/mozconfigs/smoosh-debug` file with the following content.
+
+```
+# Build only the JS shell
+ac_add_options --enable-application=js
+
+# Disable Optimization, for the most accurate debugging experience
+ac_add_options --disable-optimize
+# Enable the debugging tools: Assertions, debug only code etc.
+ac_add_options --enable-debug
+
+# Enable SmooshMonkey
+ac_add_options --enable-smoosh
+```
+
+## Build SpiderMonkey with SmooshMonkey enabled
+
+```
+cd {path-to-jsparagus}
+make check
+cd {path-to-mozilla-central}
+MOZCONFIG=$HOME/mozconfigs/smoosh-debug ./mach build
+```
+
+## Run SpiderMonkey with SmooshMonkey enabled
+
+```
+cd {path-to-mozilla-central}
+MOZCONFIG=$HOME/mozconfigs/smoosh-debug ./mach run --smoosh
+```
+
 ## Before commit
 
-Revert the change from above.
+Revert `jsparagus` reference to original one.
 
 ```
 cd {path-to-mozilla-central}
@@ -32,6 +65,7 @@ smoosh-tools cargo o
 ## Push to try with modified jsparagus
 
 Push to try with current local jsparagus and mozilla-central.
+(This needs Level 1 Commit Access to hg.mozilla.org, and SSH set up for it)
 
 ```
 cd {path-to-jsparagus}
