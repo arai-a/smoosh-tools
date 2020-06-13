@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
 import json
-import os
 import pathlib
+import os
 import re
 import subprocess
 import sys
@@ -11,7 +14,7 @@ import urllib.request
 
 
 def die(s):
-    print(s)
+    print(s, out=sys.stderr)
     sys.exit(1)
 
 
@@ -31,39 +34,42 @@ class Logger:
     def cmd(cls, cmd):
         def format_cmd(s):
             if ' ' in s:
-                return '"{}"'.format(s.replace('"', '\"'))
+                escaped = s.replace('"', '\"')
+                return f'"{escaped}"'
             return s
 
-        cls.info('$ {}'.format(' '.join(list(map(format_cmd, cmd)))))
+        formatted_command = ' '.join(list(map(format_cmd, cmd)))
+        cls.info(f'$ {formatted_command}')
 
 
 class Environment:
     @classmethod
-    def in_mc(cls, soft=False):
+    def assert_in_mc(cls, soft=False):
         cls.MC_DIR = pathlib.Path().absolute()
 
-        cls.MC_CARGO_TOML = cls.MC_DIR / 'js' / 'src' / 'frontend' / 'smoosh' / 'Cargo.toml'
+        cls.SMOOSH_DIR = cls.MC_DIR / 'js' / 'src' / 'frontend' / 'smoosh'
+        cls.MC_CARGO_TOML = cls.SMOOSH_DIR / 'Cargo.toml'
 
         if not cls.MC_CARGO_TOML.exists():
             if soft:
                 return False
-            die("{} not found.".format(cls.MC_CARGO_TOML))
+            die(f'{cls.MC_CARGO_TOML} not found.')
 
         jsparagus_dir = cls.MC_DIR.parent / 'jsparagus'
         if not jsparagus_dir.exists():
             if soft:
                 return False
-            die("{} not found.".format(jsparagus_dir))
+            die(f'{jsparagus_dir} not found.')
 
-        cls.__in_jsparagus_with(jsparagus_dir, soft)
+        cls.__assert_in_jsparagus_with(jsparagus_dir, soft)
         return True
 
     @classmethod
-    def in_jsparagus(cls):
-        cls.__in_jsparagus_with(pathlib.Path().absolute())
+    def assert_in_jsparagus(cls):
+        cls.__assert_in_jsparagus_with(pathlib.Path().absolute())
 
     @classmethod
-    def __in_jsparagus_with(cls, jsparagus_dir, soft=False):
+    def __assert_in_jsparagus_with(cls, jsparagus_dir, soft=False):
         cls.JSPARAGUS_DIR = jsparagus_dir
 
         cls.JSPARAGUS_CARGO_TOML = cls.JSPARAGUS_DIR / 'Cargo.toml'
@@ -71,23 +77,23 @@ class Environment:
         if not cls.JSPARAGUS_CARGO_TOML.exists():
             if soft:
                 return False
-            die("{} not found.".format(cls.JSPARAGUS_CARGO_TOML))
+            die(f'{cls.JSPARAGUS_CARGO_TOML} not found.')
 
         with open(cls.JSPARAGUS_CARGO_TOML, 'r') as f:
             if 'name = "jsparagus"' not in f.read():
-                die("{} is not for jsparagus.".format(cls.JSPARAGUS_CARGO_TOML))
+                die(f'{cls.JSPARAGUS_CARGO_TOML} is not for jsparagus.')
 
         return True
 
     @classmethod
     def mc(cls):
-        cls.in_mc(soft=False)
+        cls.assert_in_mc(soft=False)
         return GitRepository(cls.MC_DIR)
 
     @classmethod
     def jsparagus(cls):
-        if not cls.in_mc(soft=True):
-            cls.in_jsparagus()
+        if not cls.assert_in_mc(soft=True):
+            cls.assert_in_jsparagus()
         return GitRepository(cls.JSPARAGUS_DIR)
 
 
@@ -97,7 +103,7 @@ class GitRepository:
 
         self.git_dir = self.path / '.git'
         if not self.git_dir.exists():
-            die("Not a Git repository.".format(self.path))
+            die(f'{self.path} is not a Git repository.')
 
     def assert_clean(self):
         cmd = ['git', 'diff-index', '--quiet', 'HEAD', '--']
@@ -105,14 +111,14 @@ class GitRepository:
                                 capture_output=True,
                                 cwd=self.path)
         if output.returncode != 0:
-            die("Uncommitted changes found")
+            die('Uncommitted changes found')
 
         cmd = ['git', 'diff-index', '--cached', '--quiet', 'HEAD', '--']
         output = subprocess.run(cmd,
                                 capture_output=True,
                                 cwd=self.path)
         if output.returncode != 0:
-            die("Uncommitted changes found")
+            die('Uncommitted changes found')
 
     def get_output(self, *args):
         cmd = ['git'] + list(args)
@@ -155,22 +161,89 @@ class CIGeneratedBranch:
         branch = 'refs/heads/ci_generated'
 
         if branch not in remotes:
-            die("{} not found in upstream".format(branch))
+            die(f'{branch} not found in upstream')
 
         return remotes[branch]
+
+
+class JsparagusBuilder:
+    def run(opt):
+        Environment.assert_in_mc()
+
+        cmd = ['make', 'all']
+        Logger.cmd(cmd)
+        subprocess.run(cmd,
+                       cwd=Environment.JSPARAGUS_DIR)
+
+
+class ShellBuilder:
+    def run(opt):
+        Environment.assert_in_mc()
+
+        build_env = os.environ.copy()
+        #configs_dir = Environment.SMOOSH_DIR / 'mozconfigs'
+        configs_dir = pathlib.Path(__file__).resolve().parent.parent / 'mozconfigs'
+        if opt:
+            build_env['MOZCONFIG'] = configs_dir / 'smoosh-opt'
+        else:
+            build_env['MOZCONFIG'] = configs_dir / 'smoosh-debug'
+
+        cmd = ['./mach', 'build']
+        Logger.cmd(cmd)
+        subprocess.run(cmd,
+                       cwd=Environment.MC_DIR,
+                       env=build_env)
+
+
+class ShellRunner:
+    def run(opt):
+        Environment.assert_in_mc()
+
+        build_env = os.environ.copy()
+        #configs_dir = Environment.SMOOSH_DIR / 'mozconfigs'
+        configs_dir = pathlib.Path(__file__).resolve().parent.parent / 'mozconfigs'
+        if opt:
+            build_env['MOZCONFIG'] = configs_dir / 'smoosh-opt'
+        else:
+            build_env['MOZCONFIG'] = configs_dir / 'smoosh-debug'
+
+        cmd = ['./mach', 'run', '--smoosh']
+        Logger.cmd(cmd)
+        subprocess.run(cmd,
+                       cwd=Environment.MC_DIR,
+                       env=build_env)
+
+
+class TestRunner:
+    def run(test, opt):
+        Environment.assert_in_mc()
+
+        build_env = os.environ.copy()
+        #configs_dir = Environment.SMOOSH_DIR / 'mozconfigs'
+        configs_dir = pathlib.Path(__file__).resolve().parent.parent / 'mozconfigs'
+        if opt:
+            build_env['MOZCONFIG'] = configs_dir / 'smoosh-opt'
+        else:
+            build_env['MOZCONFIG'] = configs_dir / 'smoosh-debug'
+
+        cmd = ['./mach', test, '--args=--smoosh']
+        Logger.cmd(cmd)
+        subprocess.run(cmd,
+                       cwd=Environment.MC_DIR,
+                       env=build_env)
 
 
 class CargoUpdater:
     @classmethod
     def update_local(cls):
-        Environment.in_mc()
+        Environment.assert_in_mc()
 
         def on_official(line, lines):
             line = '# ' + line
             lines.append(line)
 
             line = 'jsparagus = { path = "../../../../../jsparagus/" }\n'
-            print(line, end='')
+            Logger.info(f'Rewriting reference: "{line}"')
             lines.append(line)
 
         def on_finish():
@@ -180,39 +253,39 @@ class CargoUpdater:
 
     @classmethod
     def update_official(cls, rev):
-        Environment.in_mc()
+        Environment.assert_in_mc()
 
         if rev == '-':
             rev = CIGeneratedBranch.get()
 
         found = False
+
         def on_official(line, lines):
             nonlocal rev, found
 
             found = True
 
             if rev:
-                line = re.sub('rev = ".+"', 'rev = "{}"'.format(rev), line)
-            print(line, end='')
+                line = re.sub(f'rev = ".+"', 'rev = "{rev}"', line)
+            Logger.info(f'Rewriting reference: "{line}"')
             lines.append(line)
 
         def on_finish():
             if not found:
-                die("Commented out official reference not found.")
-
+                die('Commented out official reference not found.')
 
         cls.__update(on_official, on_finish)
 
     @classmethod
     def update_fork(cls, user, branch):
-        Environment.in_mc()
+        Environment.assert_in_mc()
 
         def on_official(line, lines):
             line = '# ' + line
             lines.append(line)
 
-            line = 'jsparagus = {{ git = "https://github.com/{}/jsparagus", branch = "{}" }}\n'.format(user, branch)
-            print(line, end='')
+            line = f'jsparagus = {{ git = "https://github.com/{user}/jsparagus", branch = "{branch}" }}\n'
+            Logger.info(f'Rewriting reference: "{line}"')
             lines.append(line)
 
         def on_finish():
@@ -223,13 +296,15 @@ class CargoUpdater:
     def __update(on_official, on_finish):
         cargo_toml = Environment.MC_CARGO_TOML
 
-        ORIG_DEP = 'jsparagus = { git = "https://github.com/mozilla-spidermonkey/jsparagus",'
+        url = 'https://github.com/mozilla-spidermonkey/jsparagus'
+        ORIG_DEP = f'jsparagus = {{ git = "{url}",'
         OTHER_DEP = 'jsparagus ='
 
         lines = []
         with open(cargo_toml, 'r') as f:
             for line in f:
-                if line.startswith(ORIG_DEP) or line.startswith('# ' + ORIG_DEP):
+                if line.startswith(ORIG_DEP) or \
+                   line.startswith('# ' + ORIG_DEP):
                     if line.startswith('# ' + ORIG_DEP):
                         line = line[2:]
 
@@ -261,7 +336,7 @@ class PushToGeneratedBranch:
         if branch == 'HEAD':
             die('Detached HEAD is not supported. Please checkout branch')
 
-        gen_branch = '{}-generated-branch'.format(branch)
+        gen_branch = f'{branch}-generated-branch'
 
         jsparagus.run('checkout', '-b', gen_branch)
 
@@ -325,7 +400,7 @@ class PushToTry:
         mc.run('commit', '-m', 'Update vendored crates for jsparagus')
         try:
             platform = 'sm-smoosh-linux64'
-            syntax = "try: -b {} -p {} -u none -t none".format(build, platform)
+            syntax = f'try: -b {build} -p {platform} -u none -t none'
             mc.run('commit', '--allow-empty', '-m', syntax)
             try:
                 mc.run('push', 'try')
@@ -340,7 +415,7 @@ class MCRemoteRepository:
 
     @classmethod
     def call(cls, name, path):
-        url = '{}{}{}'.format(cls.HG_API_URL, name, path)
+        url = f'{cls.HG_API_URL}{name}{path}'
 
         req = urllib.request.Request(url, None, {})
         response = urllib.request.urlopen(req)
@@ -352,7 +427,7 @@ class MCRemoteRepository:
 
     @classmethod
     def file(cls, rev, path):
-        return cls.call('raw-file', '/{}{}'.format(rev, path))
+        return cls.call('raw-file', f'/{rev}{path}')
 
 
 class TreeHerder:
@@ -360,7 +435,7 @@ class TreeHerder:
 
     @classmethod
     def call(cls, name):
-        url = '{}{}'.format(cls.API_URL, name)
+        url = f'{cls.API_URL}{name}'
 
         req = urllib.request.Request(url, None, {
             'User-Agent': 'smoosh-tools',
@@ -371,7 +446,6 @@ class TreeHerder:
     @classmethod
     def call_json(cls, name):
         return json.loads(cls.call(name))
-
 
     @classmethod
     def push_id(cls, rev):
@@ -385,7 +459,7 @@ class TreeHerder:
         results = []
         results += push['results']
 
-        page = 2;
+        page = 2
         while len(results) < count:
             push = cls.call_json(f'jobs/?push_id={push_id}&format=json&page={page}')
             results += push['results']
@@ -404,7 +478,10 @@ class Status:
         Logger.info('Checking mozilla-central tip revision')
 
         m_c_rev = MCRemoteRepository.call_json('json-log', '/tip/')['node']
-        cargo_file = MCRemoteRepository.file(m_c_rev, '/js/src/frontend/smoosh/Cargo.toml').decode()
+        cargo_file = MCRemoteRepository.file(
+            m_c_rev,
+            '/js/src/frontend/smoosh/Cargo.toml'
+        ).decode()
         m = re.search('rev = "(.+)"', cargo_file)
         ci_generated_rev = m.group(1)
 
@@ -448,47 +525,103 @@ class Status:
         print(f'  Test with --smoosh: {smoosh_result}')
 
 
+parser = argparse.ArgumentParser(
+    description='Tools for SmooshMonkey + jsparagus development')
 
+subparsers = parser.add_subparsers(
+    dest='command',
+    required=True)
 
-parser = argparse.ArgumentParser(description='Tools for SmooshMonkey + jsparagus development')
+build_parser = subparsers.add_parser(
+    'build',
+    help='(m-c) Build SpiderMonkey with SmooshMonkey-enabled')
+build_parser.add_argument(
+    '--local', action='store_true',
+    help='Use local jsparagus clone')
+build_parser.add_argument(
+    '--opt', action='store_true',
+    help='Build optimized binary (if not specified, build debug binary)')
 
-subparsers = parser.add_subparsers(dest='command',
-                                   required=True)
-update_parser = subparsers.add_parser('cargo',
-                                      help='(m-c) Change jsparagus reference in Cargo.toml')
-type_parser = update_parser.add_subparsers(dest='type',
-                                           required=True)
-type_parser.add_parser('l',
-                       help='Use local jsparagus')
-official_parser = type_parser.add_parser('o',
-                                         help='Use official jsparagus')
-official_parser.add_argument('REV', nargs='?',
-                             help='Revision, or "-" for ci_generated head. defaults to current revision')
-fork_parser = type_parser.add_parser('f',
-                                     help='Use forked jsparagus')
-fork_parser.add_argument('USER',
-                         help='GitHub user name')
-fork_parser.add_argument('BRANCH',
-                         help='Branch to use')
+run_parser = subparsers.add_parser(
+    'run',
+    help='(m-c) Run SpiderMonkey with SmooshMonkey-enabled')
+run_parser.add_argument(
+    '--opt', action='store_true',
+    help='Run optimized binary (if not specified, run debug binary)')
 
-try_parser = subparsers.add_parser('try',
-                                   help='(m-c) Push to try with jsparagus generated branch')
-try_parser.add_argument('-b', type=str,
-                        default='do',
-                        help='build type (o/d/do)')
+jstests_parser = subparsers.add_parser(
+    'jstests',
+    help='(m-c) Run jstests with SmooshMonkey-enabled')
+jstests_parser.add_argument(
+    '--opt', action='store_true',
+    help='Run optimized binary (if not specified, run debug binary)')
 
-subparsers.add_parser('gen',
-                      help='(jsparagus) Push to generated branch')
+jittest_parser = subparsers.add_parser(
+    'jit-test',
+    help='(m-c) Run jit-test with SmooshMonkey-enabled')
+jittest_parser.add_argument(
+    '--opt', action='store_true',
+    help='Run optimized binary (if not specified, run debug binary)')
 
-subparsers.add_parser('ci_generated_head',
-                      help='(jsparagus) Get ci_generated branch head SHA')
+update_parser = subparsers.add_parser(
+    'cargo',
+    help='(m-c) Change jsparagus reference in Cargo.toml')
+type_parser = update_parser.add_subparsers(
+    dest='type',
+    required=True)
+type_parser.add_parser(
+    'l',
+    help='Use local jsparagus')
+official_parser = type_parser.add_parser(
+    'o',
+    help='Use official jsparagus')
+official_parser.add_argument(
+    'REV', nargs='?',
+    help='Revision, or "-" for ci_generated head. defaults to current revision')
+fork_parser = type_parser.add_parser(
+    'f',
+    help='Use forked jsparagus')
+fork_parser.add_argument(
+    'USER',
+    help='GitHub user name')
+fork_parser.add_argument(
+    'BRANCH',
+    help='Branch to use')
 
-subparsers.add_parser('status',
-                      help='(jsparagus) Show latest mozilla-central revision, and jsparagus revision referred from mozilla-central, and whether it builds or not')
+try_parser = subparsers.add_parser(
+    'try',
+    help='(m-c) Push to try with jsparagus generated branch. This requires L1 Commit Access')
+try_parser.add_argument(
+    '-b', type=str,
+    default='do',
+    help='build type (o/d/do)')
+
+subparsers.add_parser(
+    'gen',
+    help='(jsparagus) Push to "generated" branch, with generated files included')
+
+subparsers.add_parser(
+    'ci_generated_head',
+    help='(jsparagus) Get SHA of ci_generated branch HEAD')
+
+subparsers.add_parser(
+    'status',
+    help='(jsparagus) Show latest mozilla-central revision, and jsparagus revision referred from it, and whether the pair builds or not')
 
 args = parser.parse_args()
 
-if args.command == 'cargo':
+if args.command == 'build':
+    if args.local:
+        CargoUpdater.update_local()
+        JsparagusBuilder.run()
+    ShellBuilder.run(args.opt)
+elif args.command == 'run':
+    ShellRunner.run(args.opt)
+elif args.command == 'jstests':
+    TestRunner.run('jstests', args.opt)
+elif args.command == 'jit-test':
+    TestRunner.run('jit-test', args.opt)
+elif args.command == 'cargo':
     if args.type == 'l':
         CargoUpdater.update_local()
     elif args.type == 'o':

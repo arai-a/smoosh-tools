@@ -11,55 +11,46 @@ Tools for Jsparagus and SmooshMonkey development
 
 # Workflow
 
-## Start development with local clone of jsparagus
-
-Update `jsparagus` reference to local clone.
+## Build SpiderMonkey with SmooshMonkey enabled, with local clone of jsparaagus
 
 ```
 cd {path-to-mozilla-central}
-smoosh-tools cargo l
+smoosh-tools build --local
 ```
 
-## Prepare build configuration for SmooshMonkey
-
-Create `$HOME/mozconfigs/smoosh-debug` file with the following content.
+If you want to use optimized build, pass `--opt`.
 
 ```
-# Build only the JS shell
-ac_add_options --enable-application=js
-
-# Disable Optimization, for the most accurate debugging experience
-ac_add_options --disable-optimize
-# Enable the debugging tools: Assertions, debug only code etc.
-ac_add_options --enable-debug
-
-# Enable SmooshMonkey
-ac_add_options --enable-smoosh
+smoosh-tools build --local --opt
 ```
 
-## Build SpiderMonkey with SmooshMonkey enabled
-
-```
-cd {path-to-jsparagus}
-make check
-cd {path-to-mozilla-central}
-MOZCONFIG=$HOME/mozconfigs/smoosh-debug ./mach build
-```
-
-## Run SpiderMonkey with SmooshMonkey enabled
+## Run SpiderMonkey JS shell with SmooshMonkey enabled
 
 ```
 cd {path-to-mozilla-central}
-MOZCONFIG=$HOME/mozconfigs/smoosh-debug ./mach run --smoosh
+smoosh-tools run
+
 ```
 
-## Before commit
+If you want to use optimized build, pass `--opt`.
 
-Revert `jsparagus` reference to original one.
+```
+smoosh-tools run --opt
+```
+
+## Run tests with SmooshMonkey enabled
 
 ```
 cd {path-to-mozilla-central}
-smoosh-tools cargo o
+smoosh-tools jstests
+smoosh-tools jit-test
+```
+
+If you want to use optimized build, pass `--opt`.
+
+```
+smoosh-tools jstests --opt
+smoosh-tools jit-test --opt
 ```
 
 ## Push to try with modified jsparagus

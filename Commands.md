@@ -1,5 +1,50 @@
 # Commands
 
+## `build`
+
+Build SpiderMonkey JS shell with SmooshMonkey enabled.
+
+```
+smoosh-tools build
+```
+
+By passing `--local`, it uses local clone of jsparagus.
+
+```
+smoosh-tools build --local
+```
+
+By default, it builds debug build.
+By passing `--opt`, it uses optimized build.
+
+```
+smoosh-tools build --local --opt
+```
+
+## `run`
+
+Run SpiderMonkey JS shell with SmooshMonkey enabled.
+
+```
+smoosh-tools run
+```
+
+By default, it uses debug build.
+By passing `--opt`, it uses optimized build.
+
+```
+smoosh-tools run --opt
+```
+
+## `jstests` / `jit-test`
+
+Run jstests and jit-test with SpiderMonkey JS shell with SmooshMonkey enabled.
+
+```
+smoosh-tools jstests
+smoosh-tools jit-test
+```
+
 ## `gen`
 
 Used in jsparagus clone of fork.
