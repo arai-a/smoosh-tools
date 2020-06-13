@@ -18,6 +18,11 @@ cd {path-to-mozilla-central}
 smoosh-tools build --local
 ```
 
+This does the following:
+  * Run `make all` in jsparagus
+  * Modify m-c/js/src/frontend/smoosh/Cargo.toml to point local jsparagus
+  * Run `./mach build` with a mozconfig for debug build, with `--enable-smoosh` option added
+
 If you want to use optimized build, pass `--opt`.
 
 ```
