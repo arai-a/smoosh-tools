@@ -79,7 +79,9 @@ This does th following:
 * Remove all temporary commits generated above
 
 
-## Bump jsparagus revision to [`+ref/heads/ci_generated`](https://github.com/mozilla-spidermonkey/jsparagus/wiki/Branch-for-generated-files) HEAD.
+## Bump jsparagus revision to [`ci_generated` branch](https://github.com/mozilla-spidermonkey/jsparagus/wiki/Branch-for-generated-files) HEAD.
+
+Once the PR for jsparagus gets merged, it needs to be vendored into mozilla-central, by bumping the referred revision.
 
 ```
 cd {path-to-mozilla-central}
