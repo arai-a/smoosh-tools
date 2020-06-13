@@ -29,7 +29,6 @@ smoosh-tools build --local --opt
 ```
 cd {path-to-mozilla-central}
 smoosh-tools run
-
 ```
 
 If you want to use optimized build, pass `--opt`.
