@@ -14,7 +14,7 @@ import urllib.request
 
 
 def die(s):
-    print(s, out=sys.stderr)
+    print(s, file=sys.stderr)
     sys.exit(1)
 
 
