@@ -11,7 +11,7 @@ Tools for Jsparagus and SmooshMonkey development
 
 # Workflow
 
-## Build SpiderMonkey with SmooshMonkey enabled, with local clone of jsparaagus
+## Build SpiderMonkey with SmooshMonkey enabled, with local clone of jsparagus
 
 ```
 cd {path-to-mozilla-central}
