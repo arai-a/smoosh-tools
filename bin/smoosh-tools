@@ -12,6 +12,8 @@ import subprocess
 import sys
 import urllib.request
 
+JSPARAGUS_UPSTREAM = 'https://github.com/mozilla-spidermonkey/jsparagus.git'
+
 
 def die(s):
     print(s, file=sys.stderr)
@@ -29,6 +31,10 @@ class Logger:
     def info(cls, s):
         if cls.ENABLED:
             print('[INFO]', s)
+
+    @classmethod
+    def fetch(cls, url):
+        cls.info(f'Fetching {url}')
 
     @classmethod
     def cmd(cls, cmd):
@@ -136,6 +142,11 @@ class GitRepository:
                        check=True,
                        cwd=self.path)
 
+    def ensure_remote(self, name, url):
+        remotes = self.get_output('remote').strip().split('\n')
+        if name not in remotes:
+            self.run('remote', 'add', name, url)
+
     def ls_remote(self, remote):
         result = {}
         for line in self.get_output('ls-remote', remote).strip().split('\n'):
@@ -156,6 +167,7 @@ class GitRepository:
 class CIGeneratedBranch:
     def get():
         jsparagus = Environment.jsparagus()
+        jsparagus.ensure_remote('upstream', JSPARAGUS_UPSTREAM)
         remotes = jsparagus.ls_remote('upstream')
 
         branch = 'refs/heads/ci_generated'
@@ -266,7 +278,7 @@ class CargoUpdater:
             found = True
 
             if rev:
-                line = re.sub(f'rev = ".+"', 'rev = "{rev}"', line)
+                line = re.sub('rev = ".+"', f'rev = "{rev}"', line)
             Logger.info(f'Rewriting reference: "{line}"')
             lines.append(line)
 
@@ -381,10 +393,7 @@ class PushToTry:
         mc = Environment.mc()
         mc.assert_clean()
 
-        try_url = 'hg::https://hg.mozilla.org/try'
-        remotes = mc.get_output('remote').strip().split('\n')
-        if 'try' not in remotes:
-            mc.run('remote', 'add', 'try', try_url)
+        mc.ensure_remote('try', 'hg::https://hg.mozilla.org/try')
 
         github_user, gen_branch = PushToGeneratedBranch.run()
 
@@ -416,7 +425,7 @@ class MCRemoteRepository:
     @classmethod
     def call(cls, name, path):
         url = f'{cls.HG_API_URL}{name}{path}'
-
+        Logger.fetch(url)
         req = urllib.request.Request(url, None, {})
         response = urllib.request.urlopen(req)
         return response.read()
@@ -436,7 +445,7 @@ class TreeHerder:
     @classmethod
     def call(cls, name):
         url = f'{cls.API_URL}{name}'
-
+        Logger.fetch(url)
         req = urllib.request.Request(url, None, {
             'User-Agent': 'smoosh-tools',
         })
@@ -473,7 +482,8 @@ class Status:
         Logger.info('Fetching ci_generated branch')
 
         jsparagus = Environment.jsparagus()
-        jsparagus.fetch('ci_generated')
+        jsparagus.ensure_remote('upstream', JSPARAGUS_UPSTREAM)
+        jsparagus.fetch('upstream')
 
         Logger.info('Checking mozilla-central tip revision')
 
@@ -526,7 +536,11 @@ class Status:
 
 
 parser = argparse.ArgumentParser(
-    description='Tools for SmooshMonkey + jsparagus development')
+    description="""
+Tools for SmooshMonkey + jsparagus development.
+Subcommands with [m-c] are to be used in mozilla-central directory, and
+subcommands with [jsparagus] are to be used in jsparagus directory.
+""")
 
 subparsers = parser.add_subparsers(
     dest='command',
@@ -534,7 +548,7 @@ subparsers = parser.add_subparsers(
 
 build_parser = subparsers.add_parser(
     'build',
-    help='(m-c) Build SpiderMonkey with SmooshMonkey-enabled')
+    help='[m-c] Build SpiderMonkey with SmooshMonkey-enabled')
 build_parser.add_argument(
     '--local', action='store_true',
     help='Use local jsparagus clone')
@@ -544,28 +558,28 @@ build_parser.add_argument(
 
 run_parser = subparsers.add_parser(
     'run',
-    help='(m-c) Run SpiderMonkey with SmooshMonkey-enabled')
+    help='[m-c] Run SpiderMonkey with SmooshMonkey-enabled')
 run_parser.add_argument(
     '--opt', action='store_true',
     help='Run optimized binary (if not specified, run debug binary)')
 
 jstests_parser = subparsers.add_parser(
     'jstests',
-    help='(m-c) Run jstests with SmooshMonkey-enabled')
+    help='[m-c] Run jstests with SmooshMonkey-enabled')
 jstests_parser.add_argument(
     '--opt', action='store_true',
     help='Run optimized binary (if not specified, run debug binary)')
 
 jittest_parser = subparsers.add_parser(
     'jit-test',
-    help='(m-c) Run jit-test with SmooshMonkey-enabled')
+    help='[m-c] Run jit-test with SmooshMonkey-enabled')
 jittest_parser.add_argument(
     '--opt', action='store_true',
     help='Run optimized binary (if not specified, run debug binary)')
 
 update_parser = subparsers.add_parser(
     'cargo',
-    help='(m-c) Change jsparagus reference in Cargo.toml')
+    help='[m-c] Change jsparagus reference in js/src/frontend/smoosh/Cargo.toml')
 type_parser = update_parser.add_subparsers(
     dest='type',
     required=True)
@@ -590,7 +604,7 @@ fork_parser.add_argument(
 
 try_parser = subparsers.add_parser(
     'try',
-    help='(m-c) Push to try with jsparagus generated branch. This requires L1 Commit Access')
+    help='[m-c] Push to try with jsparagus generated branch. This requires L1 Commit Access')
 try_parser.add_argument(
     '-b', type=str,
     default='do',
@@ -598,15 +612,15 @@ try_parser.add_argument(
 
 subparsers.add_parser(
     'gen',
-    help='(jsparagus) Push to "generated" branch, with generated files included')
+    help='[jsparagus] Push to "generated" branch, with generated files included')
 
 subparsers.add_parser(
     'ci_generated_head',
-    help='(jsparagus) Get SHA of ci_generated branch HEAD')
+    help='[jsparagus] Get SHA of ci_generated branch HEAD')
 
 subparsers.add_parser(
     'status',
-    help='(jsparagus) Show latest mozilla-central revision, and jsparagus revision referred from it, and whether the pair builds or not')
+    help='[jsparagus] Show latest mozilla-central revision, and jsparagus revision referred from it, and whether the pair builds or not')
 
 args = parser.parse_args()
 
